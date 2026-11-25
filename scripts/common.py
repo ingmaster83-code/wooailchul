@@ -7,7 +7,7 @@ OUT = ROOT / "_site"
 BASE = "https://wooailchul.wooahouse.com"
 SITE = "우아일출"
 ICON = "🌅"
-NAVER_TOKEN = ""  # 네이버 서치어드바이저 소유확인 메타 태그 값
+NAVER_TOKEN = "32d5c59fd17093186781124ad74b2437a37e287e"  # 네이버 서치어드바이저 소유확인 메타 태그 값
 esc = html.escape
 
 NAV = [("오늘 일출", "/"), ("지역별", "/region/"), ("해맞이", "/haedoji/"), ("날짜별", "/date/"), ("이용 안내", "/guide/")]
