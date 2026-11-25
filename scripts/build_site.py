@@ -242,6 +242,60 @@ def page_dates(rs):
     write("/date/", layout("/date/", "날짜별 일출 일몰 시간", "1월 1일부터 12월 31일까지 날짜별 전국 일출·일몰 시각을 확인하세요.", '<div class="page-head"><h1>날짜별 일출·일몰 시간</h1></div>' + ad() + chips, None, [("홈", "/"), ("날짜별", "/date/")]), "0.8")
 
 
+SPOT_SHORT = {"서울특별시": "서울", "부산광역시": "부산", "대구광역시": "대구", "인천광역시": "인천", "광주광역시": "전남광주", "대전광역시": "대전", "울산광역시": "울산", "세종특별자치시": "세종", "경기도": "경기",
+              "강원특별자치도": "강원", "강원도": "강원", "충청북도": "충북", "충청남도": "충남", "전북특별자치도": "전북", "전라북도": "전북", "전라남도": "전남광주", "경상북도": "경북", "경상남도": "경남",
+              "제주특별자치도": "제주", "전남광주통합특별시": "전남광주"}
+
+
+def page_spots(rs):
+    """일출·일몰 명소(TourAPI 키워드 검색 '일출·해돋이·해맞이·일몰·낙조·노을·해넘이' 관광지) — 명소 좌표 기준 시각 계산"""
+    f = DATA / "spots.json"
+    if not f.exists():
+        return []
+    spots = json.loads(f.read_text(encoding="utf-8"))
+    out = []
+    for n, sp in enumerate(spots):
+        t = sp["a"].split()
+        sido = SPOT_SHORT.get(t[0], "") if t else ""
+        if not sido:
+            continue
+        sgg = t[1] if len(t) > 1 and t[1].endswith(("시", "군", "구")) else ""
+        r = dict(i=100000 + n, x=sp["x"], y=sp["y"], s=sido, g=sgg)
+        nm = sp["t"]
+        place = (sido + " " + sgg).strip()
+        new = sun(r, dt.date(NY, 1, 1))
+        summ = sun(r, dt.date(REF_YEAR, 6, 21))
+        wint = sun(r, dt.date(REF_YEAR, 12, 22))
+        data = {}
+        for d in (TODAY + dt.timedelta(days=i) for i in range(10)):
+            a, b, tr, cb, ce = sun(r, d)
+            data["%04d-%02d-%02d" % (d.year, d.month, d.day)] = [a, b, tr, cb, ce]
+        cur = list(days_of(TODAY.year, TODAY.month))
+        body = ['<div class="page-head"><h1>%s 일출·일몰 시간</h1><p>%s · 명소 좌표 기준 오늘·새해 첫 일출</p></div>' % (esc(nm), esc(place)),
+                '<div class="hero"><div class="today-box" id="today"><div><small>오늘 일출</small><b id="t-rise">-</b></div><div><small>오늘 일몰</small><b id="t-set">-</b></div><div><small>낮 길이</small><b id="t-len">-</b></div><div><small>남중 시각</small><b id="t-noon">-</b></div></div><p id="t-date" style="margin-top:10px"></p></div>', ad(),
+                '<h2 class="group-title">앞으로 7일</h2><div class="tbl-wrap"><table class="tbl" id="week"><tr><th>날짜</th><th>일출</th><th>일몰</th><th>낮 길이</th></tr></table></div>',
+                '<script>window.SUN=%s;</script><script src="/assets/js/today.js"></script>' % json.dumps(data, separators=(",", ":")),
+                '<h2 class="group-title">%d월 일출·일몰 시간표</h2>' % TODAY.month, day_table(r, cur),
+                '<h2 class="group-title">주요 날짜</h2>', key_days(r)]
+        if sgg and any(o["s"] == sido and o["g"] == sgg for o in rs):
+            body.append('<p><a class="chip" href="/region/%s/%s/">%s 일출·일몰 월별 시간표</a> <a class="chip" href="/spot/">다른 일출·일몰 명소</a></p>' % (q(sido), q(sgg), esc(place)))
+        else:
+            body.append('<p><a class="chip" href="/spot/">다른 일출·일몰 명소</a></p>')
+        body.append('<div class="note-box">명소의 좌표(동경 %.3f°, 북위 %.3f°) 기준 계산값입니다. 전망대·해안 지형에 따라 실제로 해가 보이는 시각은 1~2분 이상 다를 수 있고, 날씨는 반영하지 않았습니다.</div>' % (sp["x"], sp["y"]))
+        faq = [("%s의 %d년 새해 첫 일출 시각은 몇 시인가요?" % (nm, NY), "%d년 1월 1일 일출은 %s, 일몰은 %s입니다. 일출 30분 전에 도착하는 것을 권합니다." % (NY, hm(new[0]), hm(new[1]))),
+               ("%s에서 낮이 가장 긴 날의 일출·일몰은 언제인가요?" % nm, "하지 무렵(6월 21일) 일출 %s, 일몰 %s입니다. 동지 무렵(12월 22일)은 일출 %s, 일몰 %s입니다." % (hm(summ[0]), hm(summ[1]), hm(wint[0]), hm(wint[1])))]
+        path = "/spot/%s/" % sp["id"]
+        write(path, layout(path, "%s 일출 일몰 시간 - %d년 새해 첫 일출 %s" % (nm, NY, hm(new[0])), "%s(%s)의 오늘 일출·일몰 시각과 %d년 새해 첫 일출 %s, 월별 시간표를 확인하세요." % (nm, place, NY, hm(new[0])), "\n".join(body), faq,
+                           [("홈", "/"), ("일출·일몰 명소", "/spot/"), (nm, path)], coupang=True), "0.7")
+        out.append((sp, place, new))
+    if out:
+        rows = sorted(out, key=lambda v: (v[2][0], v[0]["t"]))
+        tbl = '<div class="tbl-wrap"><table class="tbl"><tr><th>명소</th><th>지역</th><th>%d/1/1 일출</th></tr>%s</table></div>' % (NY, "".join('<tr><td><a href="/spot/%s/">%s</a></td><td>%s</td><td>%s</td></tr>' % (sp["id"], esc(sp["t"]), esc(place), hm(new[0])) for sp, place, new in rows))
+        write("/spot/", layout("/spot/", "일출·일몰 명소 %d곳 - 시각 비교" % len(out), "해돋이·해맞이·일몰·낙조 명소 %d곳의 오늘 일출·일몰과 %d년 새해 첫 일출 시각을 비교하세요." % (len(out), NY),
+                               '<div class="page-head"><h1>일출·일몰 명소 %d곳</h1><p>한국관광공사 관광지 중 일출·해돋이·해맞이·일몰·낙조·노을 명소</p></div>' % len(out) + ad() + tbl, None, [("홈", "/"), ("일출·일몰 명소", "/spot/")], coupang=True), "0.8")
+    return out
+
+
 def build():
     rs = load()
     months = month_list()
@@ -277,6 +331,7 @@ def build():
                               '<div class="page-head"><h1>해맞이·해넘이 시각</h1></div>' + ad() + '<div class="card-grid"><a class="card" href="%s"><b>%d년 해맞이</b><span>새해 첫 일출 순위</span></a><a class="card" href="%s"><b>%d년 해넘이</b><span>마지막 일몰 순위</span></a></div>' % (hp, NY, np_, NY - 1),
                               None, [("홈", "/"), ("해맞이", "/haedoji/")]), "0.8")
     page_dates(rs)
+    spots_out = page_spots(rs)
     # 홈
     reps = [r for s in ORDER for r in by_s.get(s, []) if REP.get(s) == r["g"]]
     cur = {}
@@ -292,6 +347,7 @@ def build():
             '<div class="chips" id="reps">%s</div>' % "".join('<a class="chip" href="/region/%s/%s/">%s</a>' % (q(r["s"]), q(r["g"]), esc(r["s"] if r["s"] != r["g"] else r["g"])) for r in reps),
             '<script>window.SUNHOME=%s;</script><script src="/assets/js/today.js"></script>' % json.dumps(cur, ensure_ascii=False, separators=(",", ":")), ad(),
             '<h2 class="group-title">해맞이·해넘이</h2><div class="card-grid"><a class="card" href="%s"><b>%d년 해맞이 순위</b><span>새해 첫 일출이 가장 빠른 곳</span></a><a class="card" href="%s"><b>%d년 해넘이 순위</b><span>마지막 일몰 시각</span></a></div>' % (hp, NY, np_, NY - 1),
+            '<h2 class="group-title">일출·일몰 명소</h2><div class="card-grid"><a class="card" href="/spot/"><b>일출·일몰 명소 %d곳</b><span>명소 좌표 기준 시각</span></a></div>' % len(spots_out),
             '<h2 class="group-title">지역별</h2><div class="card-grid">%s</div>' % cards, '<script src="/assets/js/search.js"></script>']
     faq = [("일출·일몰 시각은 어떻게 계산했나요?", "태양의 위치를 천문 계산으로 구해 태양 중심이 지평선 아래 0°34′일 때를 일출·일몰로 했습니다. 시군구 대표 좌표 기준이며 고도는 0m로 가정했습니다."),
            ("한국천문연구원 값과 같은가요?", "같은 기준(대기굴절·태양 반지름 반영)이라 보통 1분 이내로 일치합니다. 공식 값이 필요하면 한국천문연구원 천문우주지식정보를 확인하세요."),
@@ -299,6 +355,7 @@ def build():
     ld = [{"@context": "https://schema.org", "@type": "WebSite", "name": "우아일출", "url": BASE + "/", "potentialAction": {"@type": "SearchAction", "target": BASE + "/?q={q}", "query-input": "required name=q"}}]
     write("/", layout("/", "오늘 일출 일몰 시간 - 전국 %d개 시군구 | 우아일출" % len(rs), "오늘 우리 동네 일출·일몰 시간과 낮 길이, 월별 시간표, 새해 해맞이 시각을 전국 %d개 시군구별로 확인하세요." % len(rs), "\n".join(body), faq, None, "website", ld), "1.0")
     idx = [[r["g"], "/region/%s/%s/" % (r["s"], r["g"]), r["s"], "", ""] for r in rs]
+    idx += [[sp["t"], "/spot/%s/" % sp["id"], place, "일출 명소", ""] for sp, place, _ in spots_out]
     (OUT / "search_index.json").write_text(json.dumps(idx, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     pages_static()
     finish()
